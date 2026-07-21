@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pH dependence of the specificity constant V/K</title>
+<style>
+  :root{
+    --paper:#fcfcfd; --card:#f4f5f8; --ink:#182230; --ink-soft:#5b6472;
+    --hair:#e2e5ec; --grid:#e9ebf1; --axis:#a9afbb;
+    --vk:#6b3fb5;        /* V/K curve  */
+    --vkfill:rgba(107,63,181,0.10);
+    --eK:#c77f00;        /* free-enzyme ionizations  */
+    --esK:#1f8a8c;       /* ES-complex ionizations   */
+    --vmc:#2f4bd6;       /* Vm,app companion curve   */
+    --kmc:#c9662b;       /* Km,app companion curve   */
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+       line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:22px 20px 34px}
+  header h1{font-size:1.15rem;font-weight:650;letter-spacing:-.01em;margin:0 0 2px}
+  header p{margin:0;color:var(--ink-soft);font-size:.86rem}
+
+  .eqn{margin:14px 0 6px;padding:11px 14px;background:var(--card);border:1px solid var(--hair);
+       border-radius:10px;font-family:var(--mono);font-size:.88rem;
+       display:flex;align-items:center;gap:.5ch;flex-wrap:wrap}
+  .frac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;margin:0 .3ch}
+  .frac .num{padding:0 .5ch 2px} .frac .den{padding:2px .5ch 0;border-top:1.5px solid var(--ink)}
+  sub{font-size:.72em} sup{font-size:.72em}
+  .eK{color:var(--eK)} .esK{color:var(--esK)}
+  .strike{position:relative;color:var(--esK);opacity:.65}
+  .strike::after{content:"";position:absolute;left:-2px;right:-2px;top:50%;height:1.5px;background:var(--esK)}
+
+  .panel{border:1px solid var(--hair);border-radius:12px;overflow:hidden;margin-top:8px;background:#fff}
+  .plotbox{position:relative;background:var(--paper);padding:6px 6px 0}
+  canvas{display:block;width:100%;height:auto;touch-action:none}
+
+  .controls{background:var(--card);border-top:1px solid var(--hair);padding:16px 18px;
+            display:grid;gap:14px;grid-template-columns:1fr 1fr}
+  .grouphdr{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin-top:2px;
+            font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft)}
+  .grouphdr .bar{height:2px;width:22px;border-radius:2px}
+  .grouphdr .tag{font-size:.68rem;font-weight:600;text-transform:none;letter-spacing:0;
+                 color:var(--esK);background:#e4f2f2;border-radius:20px;padding:1px 9px}
+  .ctl{display:flex;flex-direction:column;gap:6px}
+  .ctl.full{grid-column:1/-1}
+  .ctl .row{display:flex;justify-content:space-between;align-items:baseline}
+  .ctl label{font-size:.82rem;font-weight:600}
+  .ctl .val{font-family:var(--mono);font-size:.86rem;background:#fff;border:1px solid var(--hair);
+            border-radius:6px;padding:1px 7px}
+  .ctl small{color:var(--ink-soft);font-size:.72rem}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
+                    background:#d6dae3;outline:none;margin:2px 0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:17px;height:17px;
+    border-radius:50%;background:#fff;border:2px solid var(--vk);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.18)}
+  input[type=range]::-moz-range-thumb{width:17px;height:17px;border-radius:50%;background:#fff;
+    border:2px solid var(--vk);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.18)}
+  .eThumb::-webkit-slider-thumb{border-color:var(--eK)} .eThumb::-moz-range-thumb{border-color:var(--eK)}
+  .esThumb::-webkit-slider-thumb{border-color:var(--esK)} .esThumb::-moz-range-thumb{border-color:var(--esK)}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px rgba(107,63,181,.25)}
+
+  .toggles{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;
+           padding-top:8px;border-top:1px dashed var(--hair)}
+  .chk{display:flex;align-items:center;gap:7px;font-size:.82rem;font-weight:600;cursor:pointer}
+  .chk input{width:15px;height:15px;accent-color:var(--vk);cursor:pointer}
+  .btn{font:inherit;font-size:.8rem;font-weight:600;color:#fff;background:var(--esK);border:1px solid var(--esK);
+       border-radius:7px;padding:6px 13px;cursor:pointer}
+  .btn:hover{filter:brightness(1.08)}
+  .btn.ghost{color:var(--ink);background:#fff;border-color:var(--hair);margin-left:auto}
+  .btn.ghost:hover{background:#eef0f5}
+  .btn:disabled{opacity:.5;cursor:default}
+
+  .readout{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px 22px;padding-top:8px;border-top:1px dashed var(--hair)}
+  .stat{display:flex;flex-direction:column}
+  .stat .k{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft)}
+  .stat .v{font-family:var(--mono);font-size:1rem;font-weight:600}
+
+  .flash{grid-column:1/-1;font-size:.8rem;font-weight:600;color:var(--esK);
+         background:#e4f2f2;border-left:3px solid var(--esK);border-radius:0 6px 6px 0;
+         padding:7px 11px;opacity:0;transition:opacity .25s;pointer-events:none}
+  .flash.on{opacity:1}
+
+  .companion{margin-top:14px;border:1px solid var(--hair);border-radius:12px;background:#fff;
+             overflow:hidden;display:none}
+  .companion.show{display:block}
+  .companion .hd{padding:10px 16px;background:var(--card);border-bottom:1px solid var(--hair);
+                 font-size:.8rem;color:var(--ink-soft)}
+  .twoup{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .twoup > div{padding:6px 6px 2px}
+  .twoup > div + div{border-left:1px solid var(--hair)}
+
+  .foot{margin-top:12px;font-size:.76rem;color:var(--ink-soft)}
+  .chip{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:middle;margin-right:4px}
+  @media(max-width:600px){.controls{grid-template-columns:1fr}.twoup{grid-template-columns:1fr}
+    .twoup > div + div{border-left:none;border-top:1px solid var(--hair)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>pH dependence of the specificity constant, V/K</h1>
+    <p>Dividing V<sub>m,app</sub> by K<sub>m,app</sub> cancels the ES pH function entirely, leaving a bell-shaped curve governed only by ionizations of the <span class="eK"><strong>free enzyme</strong></span>.</p>
+  </header>
+
+  <div class="eqn">
+    <span class="frac">
+      <span class="num">V<sub>m,app</sub></span>
+      <span class="den">K<sub>m,app</sub></span>
+    </span>
+    &nbsp;=&nbsp;
+    <span class="frac">
+      <span class="num">V<sub>m</sub> / <span class="strike">f<sub>ES</sub></span></span>
+      <span class="den">K<sub>m</sub> f<sub>E</sub> / <span class="strike">f<sub>ES</sub></span></span>
+    </span>
+    &nbsp;=&nbsp;
+    <span class="frac">
+      <span class="num">V<sub>m</sub> / K<sub>m</sub></span>
+      <span class="den">1 + 10<sup class="eK">(pK<sub>a,E1</sub>&minus;pH)</sup> + 10<sup class="eK">(pH&minus;pK<sub>a,E2</sub>)</sup></span>
+    </span>
+  </div>
+
+  <div class="panel">
+    <div class="plotbox"><canvas id="cv"></canvas></div>
+    <div class="controls">
+
+      <div class="grouphdr"><span class="bar" style="background:var(--eK)"></span>Free enzyme E &middot; these shape the curve</div>
+      <div class="ctl">
+        <div class="row"><label for="e1"><span class="eK">pK<sub>a,E1</sub></span> &middot; acidic limb</label><span class="val" id="e1Val">5.0</span></div>
+        <input type="range" id="e1" class="eThumb" min="0" max="14" step="0.1" value="5">
+        <small>group that must lose a proton for productive binding</small>
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="e2"><span class="eK">pK<sub>a,E2</sub></span> &middot; basic limb</label><span class="val" id="e2Val">8.0</span></div>
+        <input type="range" id="e2" class="eThumb" min="0" max="14" step="0.1" value="8">
+        <small>group that must stay protonated for productive binding</small>
+      </div>
+
+      <div class="grouphdr">
+        <span class="bar" style="background:var(--esK)"></span>ES complex
+        <span class="tag">cancels &mdash; no effect on V/K</span>
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="es1"><span class="esK">pK<sub>a,ES1</sub></span></label><span class="val" id="es1Val">4.0</span></div>
+        <input type="range" id="es1" class="esThumb" min="0" max="14" step="0.1" value="4">
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="es2"><span class="esK">pK<sub>a,ES2</sub></span></label><span class="val" id="es2Val">9.0</span></div>
+        <input type="range" id="es2" class="esThumb" min="0" max="14" step="0.1" value="9">
+      </div>
+
+      <div class="ctl">
+        <div class="row"><label for="vm">V<sub>m</sub></label><span class="val" id="vmVal">100</span></div>
+        <input type="range" id="vm" min="1" max="200" step="1" value="100">
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="km">K<sub>m</sub></label><span class="val" id="kmVal">50</span></div>
+        <input type="range" id="km" min="1" max="200" step="1" value="50">
+      </div>
+
+      <div class="toggles">
+        <button class="btn" id="demo">Sweep ES pK<sub>a</sub>'s &mdash; watch V/K stay fixed</button>
+        <label class="chk"><input type="checkbox" id="comp"> Show V<sub>m,app</sub> and K<sub>m,app</sub></label>
+        <label class="chk"><input type="checkbox" id="logy"> Log y-axis</label>
+        <button class="btn ghost" id="reset">Reset</button>
+      </div>
+
+      <div class="flash" id="flash">ES p<em>K</em><sub>a</sub>'s are changing &mdash; V<sub>m,app</sub> and K<sub>m,app</sub> both shift, but their ratio does not.</div>
+
+      <div class="readout">
+        <div class="stat"><span class="k">Optimum pH</span><span class="v" id="optOut">6.50</span></div>
+        <div class="stat"><span class="k">Peak V/K</span><span class="v" id="peakOut">1.88</span></div>
+        <div class="stat"><span class="k">Peak / (V<sub>m</sub>/K<sub>m</sub>)</span><span class="v" id="fracOut">0.940</span></div>
+        <div class="stat"><span class="k">Width at &frac12;-max</span><span class="v" id="widthOut">3.10</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="companion" id="companion">
+    <div class="hd">The two parameters separately. Move the <span class="esK"><strong>teal ES sliders</strong></span> and both of these curves change &mdash; yet the V/K curve above is unmoved, because f<sub>ES</sub> appears in each and cancels in the ratio.</div>
+    <div class="twoup">
+      <div><canvas id="cvV"></canvas></div>
+      <div><canvas id="cvK"></canvas></div>
+    </div>
+  </div>
+
+  <p class="foot">
+    <span class="chip" style="background:var(--vk)"></span>V/K &nbsp;
+    <span class="chip" style="background:var(--eK)"></span>free-enzyme pK<sub>a</sub>'s (drag on the pH axis) &nbsp;
+    <span class="chip" style="background:var(--vmc)"></span>V<sub>m,app</sub> &nbsp;
+    <span class="chip" style="background:var(--kmc)"></span>K<sub>m,app</sub>.
+    The V/K profile is half-maximal near each free-enzyme pK<sub>a</sub>, peaks at their midpoint, and reaches V<sub>m</sub>/K<sub>m</sub> only when the two are well separated &mdash; the same algebra as the V<sub>m,app</sub> bell curve, but reporting on the free enzyme rather than the complex.
+  </p>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const els = {
+    e1:$("e1"), e2:$("e2"), es1:$("es1"), es2:$("es2"), vm:$("vm"), km:$("km"),
+    e1Val:$("e1Val"), e2Val:$("e2Val"), es1Val:$("es1Val"), es2Val:$("es2Val"),
+    vmVal:$("vmVal"), kmVal:$("kmVal"),
+    comp:$("comp"), logy:$("logy"), demo:$("demo"), reset:$("reset"),
+    companion:$("companion"), flash:$("flash"),
+    optOut:$("optOut"), peakOut:$("peakOut"), fracOut:$("fracOut"), widthOut:$("widthOut")
+  };
+  const cv=$("cv"), ctx=cv.getContext("2d");
+  const cvV=$("cvV"), ctxV=cvV.getContext("2d");
+  const cvK=$("cvK"), ctxK=cvK.getContext("2d");
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const PH_MIN=0, PH_MAX=14, L=Math.log10;
+  const SANS = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+
+  function state(){
+    return { e1:+els.e1.value, e2:+els.e2.value, es1:+els.es1.value, es2:+els.es2.value,
+             vm:+els.vm.value, km:+els.km.value, logy:els.logy.checked };
+  }
+  // the two Michaelis pH functions
+  const fE  = (pH,s) => 1 + Math.pow(10, s.e1 - pH)  + Math.pow(10, pH - s.e2);
+  const fES = (pH,s) => 1 + Math.pow(10, s.es1 - pH) + Math.pow(10, pH - s.es2);
+  // the three observables
+  const vkApp = (pH,s) => (s.vm/s.km) / fE(pH,s);
+  const vmApp = (pH,s) => s.vm / fES(pH,s);
+  const kmApp = (pH,s) => s.km * fE(pH,s) / fES(pH,s);
+
+  function fmt(v){
+    const a=Math.abs(v);
+    if(v===0) return "0";
+    if(a>=1000||a<0.001) return v.toExponential(0).replace("e+","e");
+    if(a>=100) return v.toFixed(0);
+    if(a>=10)  return v.toFixed(1);
+    if(a>=1)   return v.toFixed(2);
+    return v.toFixed(3);
+  }
+
+  /* ---------- generic plotter ---------- */
+  function plot(ctx, cvEl, opts){
+    const W=cvEl._w, H=cvEl._h, pad=opts.pad;
+    const plotW=W-pad.l-pad.r, plotH=H-pad.t-pad.b;
+    const s=state();
+    const N=Math.max(200, Math.round(plotW));
+    const pts=[]; let mn=Infinity, mx=-Infinity;
+    for(let i=0;i<=N;i++){
+      const pH=PH_MIN+(PH_MAX-PH_MIN)*i/N, v=opts.f(pH,s);
+      pts.push([pH,v]); if(v<mn)mn=v; if(v>mx)mx=v;
+    }
+    const ceil = opts.ceil ? opts.ceil(s) : mx;
+    const vHi=Math.max(mx, ceil), vLo=Math.min(mn, opts.includeCeilLow?ceil:mn);
+    let yMin, yMax;
+    if(s.logy){
+      yMin=Math.pow(10,Math.floor(L(Math.max(vLo*0.9,1e-9))));
+      yMax=Math.pow(10,Math.ceil(L(vHi*1.1)));
+      if(yMax<=yMin) yMax=yMin*10;
+    } else { yMin=0; yMax=vHi*1.08 || 1; }
+
+    const xToPx = pH => pad.l+(pH-PH_MIN)/(PH_MAX-PH_MIN)*plotW;
+    const yToPx = v => s.logy
+      ? pad.t+(1-(L(Math.max(v,yMin))-L(yMin))/(L(yMax)-L(yMin)))*plotH
+      : pad.t+(1-v/yMax)*plotH;
+
+    ctx.clearRect(0,0,W,H);
+    ctx.font=(opts.small?"10px ":"12px ")+SANS;
+    ctx.textBaseline="middle"; ctx.textAlign="right";
+    ctx.lineWidth=1;
+    // y grid
+    let yt=[];
+    if(s.logy){ for(let d=Math.round(L(yMin)); d<=Math.round(L(yMax)); d++) yt.push(Math.pow(10,d)); }
+    else { const n=opts.small?4:5; for(let i=0;i<=n;i++) yt.push(yMax*i/n); }
+    for(const v of yt){ const y=yToPx(v);
+      ctx.strokeStyle=css("--grid"); ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+      ctx.fillStyle=css("--ink-soft"); ctx.fillText(fmt(v), pad.l-6, y);
+    }
+    // x grid
+    ctx.textAlign="center"; ctx.textBaseline="top";
+    const step=opts.small?4:2;
+    for(let p=PH_MIN;p<=PH_MAX;p+=step){ const x=xToPx(p);
+      ctx.strokeStyle=css("--grid"); ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+plotH); ctx.stroke();
+      ctx.fillStyle=css("--ink-soft"); ctx.fillText(p, x, pad.t+plotH+6);
+    }
+    ctx.strokeStyle=css("--axis"); ctx.lineWidth=1.2; ctx.strokeRect(pad.l,pad.t,plotW,plotH);
+
+    // titles
+    ctx.fillStyle=css("--ink"); ctx.textAlign="center"; ctx.textBaseline="top";
+    ctx.font=(opts.small?"600 10.5px ":"600 12.5px ")+SANS;
+    ctx.fillText(opts.xlabel, pad.l+plotW/2, H-(opts.small?13:15));
+    ctx.save(); ctx.translate(opts.small?11:15, pad.t+plotH/2); ctx.rotate(-Math.PI/2);
+    ctx.textBaseline="middle"; ctx.fillText(opts.ylabel,0,0); ctx.restore();
+
+    // ceiling reference
+    if(opts.ceil){
+      const yc=yToPx(ceil);
+      if(yc>pad.t-1 && yc<pad.t+plotH+1){
+        ctx.setLineDash([5,4]); ctx.strokeStyle=opts.ceilColor||"rgba(0,0,0,.3)"; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(pad.l,yc); ctx.lineTo(pad.l+plotW,yc); ctx.stroke(); ctx.setLineDash([]);
+        if(opts.ceilLabel){
+          ctx.fillStyle=opts.ceilColor||"rgba(0,0,0,.5)";
+          ctx.font=(opts.small?"9.5px ":"11px ")+css("--mono");
+          ctx.textAlign="left"; ctx.textBaseline="bottom";
+          ctx.fillText(opts.ceilLabel, pad.l+4, yc-2);
+        }
+      }
+    }
+
+    // pKa markers
+    (opts.marks||[]).forEach(m=>{
+      const x=xToPx(m.pk);
+      ctx.setLineDash([4,4]); ctx.strokeStyle=m.color; ctx.globalAlpha=.85; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+plotH); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
+      if(m.label){
+        ctx.fillStyle=m.color; ctx.font=(opts.small?"600 9.5px ":"600 11px ")+css("--mono");
+        const right = x>pad.l+plotW-42;
+        ctx.textAlign=right?"right":"left"; ctx.textBaseline="top";
+        ctx.fillText(m.label+" "+m.pk.toFixed(1), right?x-4:x+4, pad.t+3);
+      }
+    });
+
+    // fill + curve
+    ctx.save();
+    ctx.beginPath(); ctx.rect(pad.l,pad.t,plotW,plotH); ctx.clip();
+    if(opts.fill && !s.logy){
+      ctx.beginPath(); ctx.moveTo(xToPx(pts[0][0]), yToPx(0));
+      for(const q of pts) ctx.lineTo(xToPx(q[0]), yToPx(q[1]));
+      ctx.lineTo(xToPx(pts[pts.length-1][0]), yToPx(0)); ctx.closePath();
+      ctx.fillStyle=opts.fill; ctx.fill();
+    }
+    ctx.beginPath();
+    pts.forEach((q,idx)=>{ const x=xToPx(q[0]), y=yToPx(q[1]);
+      idx===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    ctx.strokeStyle=opts.color; ctx.lineWidth=opts.small?2:2.4; ctx.lineJoin="round"; ctx.stroke();
+    ctx.restore();
+
+    // knobs on the pH axis
+    (opts.knobs||[]).forEach(k=>{
+      const x=xToPx(k.pk), y=pad.t+plotH;
+      ctx.beginPath(); ctx.moveTo(x,y-7); ctx.lineTo(x-6,y+3); ctx.lineTo(x+6,y+3); ctx.closePath();
+      ctx.fillStyle=k.color; ctx.fill(); ctx.strokeStyle="#fff"; ctx.lineWidth=1.4; ctx.stroke();
+    });
+
+    return { pts, xToPx, yToPx, plotW, plotH, pad, mn, mx };
+  }
+
+  /* ---------- sizing ---------- */
+  function size(el, ctx2, ratio, maxH){
+    const cssW = el.parentElement.clientWidth;
+    const W = Math.max(220, cssW);
+    const H = Math.round(Math.min(maxH, Math.max(150, W*ratio)));
+    const dpr = Math.max(1, window.devicePixelRatio||1);
+    el.width=W*dpr; el.height=H*dpr; el.style.height=H+"px";
+    ctx2.setTransform(dpr,0,0,dpr,0,0);
+    el._w=W; el._h=H;
+  }
+  function resize(){
+    size(cv, ctx, 0.58, 430);
+    size(cvV, ctxV, 0.72, 250);
+    size(cvK, ctxK, 0.72, 250);
+    draw();
+  }
+
+  /* ---------- half-max width ---------- */
+  function halfWidth(s){
+    const M=3000, peak=(s.vm/s.km)/(1+2*Math.pow(10,-(s.e2-s.e1)/2));
+    let lo=null,hi=null;
+    for(let i=0;i<=M;i++){
+      const pH=PH_MIN+(PH_MAX-PH_MIN)*i/M;
+      if(vkApp(pH,s)>=peak/2){ if(lo===null) lo=pH; hi=pH; }
+    }
+    return lo===null?null:hi-lo;
+  }
+
+  /* ---------- draw everything ---------- */
+  function draw(){
+    const s=state();
+    const marksE = [
+      {pk:s.e1, color:css("--eK"), label:"pK\u2090,E1"},
+      {pk:s.e2, color:css("--eK"), label:"pK\u2090,E2"}
+    ];
+    const optPH=(s.e1+s.e2)/2;
+
+    const main = plot(ctx, cv, {
+      f: vkApp, color: css("--vk"), fill: css("--vkfill"),
+      pad:{l:62,r:16,t:26,b:44},
+      xlabel:"pH  ( = \u2212log[H\u207A] )", ylabel:"V/K",
+      ceil: st => st.vm/st.km, ceilColor:"rgba(107,63,181,.55)", ceilLabel:"V\u2098/K\u2098",
+      marks: marksE,
+      knobs: marksE.map(m=>({pk:m.pk,color:m.color}))
+    });
+    // optimum marker on main plot
+    const xo=main.xToPx(optPH), yo=main.yToPx(vkApp(optPH,s));
+    ctx.setLineDash([2,3]); ctx.strokeStyle=css("--vk"); ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(xo,main.pad.t); ctx.lineTo(xo,main.pad.t+main.plotH); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(xo,yo,4.5,0,2*Math.PI);
+    ctx.fillStyle=css("--vk"); ctx.fill(); ctx.strokeStyle="#fff"; ctx.lineWidth=1.5; ctx.stroke();
+
+    if(els.comp.checked){
+      const marksES=[{pk:s.es1,color:css("--esK")},{pk:s.es2,color:css("--esK")}];
+      plot(ctxV, cvV, {
+        f: vmApp, color: css("--vmc"), small:true,
+        pad:{l:44,r:10,t:20,b:32},
+        xlabel:"pH", ylabel:"V\u2098,\u2090\u209A\u209A",
+        ceil: st => st.vm, ceilColor:"rgba(47,75,214,.5)", ceilLabel:"V\u2098",
+        marks: marksES
+      });
+      plot(ctxK, cvK, {
+        f: kmApp, color: css("--kmc"), small:true,
+        pad:{l:48,r:10,t:20,b:32},
+        xlabel:"pH", ylabel:"K\u2098,\u2090\u209A\u209A",
+        ceil: st => st.km, ceilColor:"rgba(201,102,43,.5)", ceilLabel:"K\u2098",
+        includeCeilLow:true,
+        marks: marksES.concat(marksE.map(m=>({pk:m.pk,color:m.color})))
+      });
+    }
+
+    // readouts
+    const peak=vkApp(optPH,s), w=halfWidth(s);
+    els.optOut.textContent  = optPH.toFixed(2);
+    els.peakOut.textContent = fmt(peak);
+    els.fracOut.textContent = (peak/(s.vm/s.km)).toFixed(3);
+    els.widthOut.textContent= w===null?"\u2014":w.toFixed(2);
+  }
+
+  /* ---------- drag the free-enzyme knobs on the main plot ---------- */
+  let drag=null;
+  function pick(px,py){
+    const pad={l:62,r:16,t:26,b:44}, W=cv._w, H=cv._h;
+    const plotW=W-pad.l-pad.r, yAxis=H-pad.b;
+    if(py<yAxis-14||py>yAxis+16) return null;
+    const s=state();
+    const X=pk=>pad.l+(pk-PH_MIN)/(PH_MAX-PH_MIN)*plotW;
+    const d1=Math.abs(px-X(s.e1)), d2=Math.abs(px-X(s.e2));
+    if(Math.min(d1,d2)>15) return null;
+    return d1<=d2?"e1":"e2";
+  }
+  cv.addEventListener("pointermove", e=>{
+    const r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+    if(drag){
+      const pad={l:62,r:16}, plotW=cv._w-pad.l-pad.r;
+      let pH=PH_MIN+(px-pad.l)/plotW*(PH_MAX-PH_MIN);
+      pH=Math.round(Math.max(PH_MIN,Math.min(PH_MAX,pH))*10)/10;
+      els[drag].value=pH; sync(); e.preventDefault();
+    } else cv.style.cursor = pick(px,py)?"ew-resize":"default";
+  });
+  cv.addEventListener("pointerdown", e=>{
+    const r=cv.getBoundingClientRect(), k=pick(e.clientX-r.left, e.clientY-r.top);
+    if(k){ drag=k; cv.setPointerCapture(e.pointerId); e.preventDefault(); }
+  });
+  const endDrag=()=>drag=null;
+  cv.addEventListener("pointerup", endDrag);
+  cv.addEventListener("pointercancel", endDrag);
+
+  /* ---------- the demonstration sweep ---------- */
+  let anim=null;
+  function stopDemo(){
+    if(anim){ cancelAnimationFrame(anim); anim=null; }
+    els.demo.disabled=false; els.flash.classList.remove("on");
+  }
+  els.demo.addEventListener("click", ()=>{
+    if(anim){ stopDemo(); return; }
+    if(!els.comp.checked){ els.comp.checked=true; els.companion.classList.add("show"); resize(); }
+    els.demo.disabled=true; els.flash.classList.add("on");
+    const t0=performance.now(), DUR=5200;
+    const a1=+els.es1.value, a2=+els.es2.value;
+    const step=now=>{
+      const u=Math.min(1,(now-t0)/DUR), th=u*Math.PI*2;
+      els.es1.value=(a1+2.2*Math.sin(th)).toFixed(1);
+      els.es2.value=(a2-2.2*Math.sin(th)).toFixed(1);
+      sync();
+      if(u<1){ anim=requestAnimationFrame(step); }
+      else { els.es1.value=a1.toFixed(1); els.es2.value=a2.toFixed(1); sync(); stopDemo(); }
+    };
+    anim=requestAnimationFrame(step);
+  });
+
+  /* ---------- wiring ---------- */
+  function sync(){
+    const s=state();
+    els.e1Val.textContent=s.e1.toFixed(1);
+    els.e2Val.textContent=s.e2.toFixed(1);
+    els.es1Val.textContent=s.es1.toFixed(1);
+    els.es2Val.textContent=s.es2.toFixed(1);
+    els.vmVal.textContent=s.vm.toFixed(0);
+    els.kmVal.textContent=s.km.toFixed(0);
+    draw();
+  }
+  ["e1","e2","es1","es2","vm","km"].forEach(id=>els[id].addEventListener("input", ()=>{
+    if(anim && (id==="e1"||id==="e2")) stopDemo();
+    sync();
+  }));
+  els.logy.addEventListener("change", sync);
+  els.comp.addEventListener("change", ()=>{
+    els.companion.classList.toggle("show", els.comp.checked);
+    resize();
+  });
+  els.reset.addEventListener("click", ()=>{
+    stopDemo();
+    els.e1.value=5; els.e2.value=8; els.es1.value=4; els.es2.value=9;
+    els.vm.value=100; els.km.value=50;
+    els.logy.checked=false; els.comp.checked=false;
+    els.companion.classList.remove("show");
+    resize();
+  });
+
+  window.addEventListener("resize", resize);
+  resize(); sync();
+})();
+</script>
+</body>
+</html>
